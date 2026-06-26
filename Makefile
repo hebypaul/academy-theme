@@ -19,42 +19,29 @@ include .github/build/Makefile.show-help.mk
 # Academy Theme Development Targets
 #----------------------------------------------------------------------------
 ## ------------------------------------------------------------
-----LOCAL_BUILDS: Show help for available targets
+---LOCAL_BUILDS: Show help for available targets
 
 ## Install dependencies on your local machine.
 setup:
 	npm install
 
-## Verify required commands and local dependencies are present.
-check-deps:
-	@echo "Checking if 'npm' and local 'hugo' binary are present..."
-	@command -v npm > /dev/null || { echo "Error: 'npm' not found. Please install Node.js and npm."; exit 1; }
-	@test -x node_modules/.bin/hugo || { echo "Error: Hugo binary not found in node_modules. Please run 'make setup' first."; exit 1; }
-	@echo "Dependencies check passed."
-
 ## Run site on your local machine with draft and future content enabled.
-site: check-deps check-go
-	npm run dev:site
-
-## Run site on your local machine in serve mode (without file watching).
-serve: check-deps check-go
-	npm run dev:serve
+site: check-go
+	hugo server -D -F
 
 ## Build site on your local machine.
-build: check-deps check-go
-	npm run dev:build
+build:
+	hugo
 
 ## Build site for local consumption
 build-preview:
 	hugo --baseURL=$(BASEURL)
 
 ## Empty build cache and run site on your local machine.
-clean:
-	npm run clean
-	$(MAKE) site
-
-## ------------------------------------------------------------
-----MAINTENANCE: Show help for available targets
+clean: 
+	hugo --cleanDestinationDir
+	make setup
+	make site
 
 ## Fix Markdown linting issues
 lint-fix:
@@ -67,10 +54,13 @@ lint-fix:
 	@echo "Running markdownlint-cli2 --fix..."
 	@markdownlint-cli2 --fix "**/*.md" "#node_modules" "#public" "#resources"
 
+## ------------------------------------------------------------
+---MAINTENANCE: Show help for available targets
+
 ## Verify Go is installed locally.
 check-go:
 	@echo "Checking if Go is installed..."
 	@command -v go > /dev/null || (echo "Go is not installed. Please install it before proceeding."; exit 1)
 	@echo "Go is installed."
 
-.PHONY: setup check-deps build build-preview site serve clean check-go lint-fix
+.PHONY: setup site build build-preview clean lint-fix check-go
