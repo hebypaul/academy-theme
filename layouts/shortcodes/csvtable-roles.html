@@ -2,102 +2,110 @@
   Renders a permissions CSV as one table per role, listing the permissions
   that role has access to.
   Usage:
-  {{< role-tables src="keys-backup.csv" >}}
-  {{< role-tables src="static/data/csv/keys-backup.csv" >}}
+  {{< csvtable-roles >}}
+  {{< csvtable-roles src="keys-backup.csv" >}}
+  {{< csvtable-roles src="static/data/csv/keys-backup.csv" >}}
 
   Params:
-  src - path to the CSV. Resolved against the page bundle first, then
-        assets/, then the project root.
+  src       - path to the CSV. Resolved against the page bundle first, then
+              assets/, then the project root. Defaults to
+              static/data/csv/keys-backup.csv.
+  headerRow - 0-based index of the header row. Default 0. Set to 1 for a CSV
+              with a title row above the header.
 
-  Expected CSV shape: row 1 is the header, columns 2 and 3 are Function and
-  Feature, role columns run from column 5 up to "Keychain ID". A row is
-  listed under a role when that role's cell is X or X*.
+  Expected CSV shape: every column that isn't Category, Function, Feature, or
+  metadata (Keychain ID, Key ID, Inserted, Local Provider) is treated as a
+  role. A row is listed under a role when that role's cell is X or X*.
 */}}
-{{- $src := .Get "src" -}}
+{{- $src := .Get "src" | default "static/data/csv/keys-backup.csv" -}}
+{{- $headerRow := int (.Get "headerRow" | default 0) -}}
+{{- $nonRoleColumns := slice "Category" "Function" "Feature" "Keychain ID" "Key ID" "Inserted" "Local Provider" -}}
 {{- $opts := dict "delimiter" "," -}}
 {{- $data := "" -}}
 
-{{- if not $src -}}
-  {{- errorf "role-tables: src required. See %s" .Position -}}
+{{- with or (.Page.Resources.Get $src) (resources.Get $src) -}}
+  {{- $data = transform.Unmarshal $opts . -}}
 {{- else -}}
-  {{- with or (.Page.Resources.Get $src) (resources.Get $src) -}}
-    {{- $data = transform.Unmarshal $opts . -}}
+  {{- if os.FileExists $src -}}
+    {{- $data = transform.Unmarshal $opts (os.ReadFile $src) -}}
   {{- else -}}
-    {{- if os.FileExists $src -}}
-      {{- $data = transform.Unmarshal $opts (os.ReadFile $src) -}}
-    {{- else -}}
-      {{- errorf "role-tables: %q not found in page bundle, assets, or project root. See %s" $src .Position -}}
-    {{- end -}}
+    {{- errorf "csvtable-roles: %q not found in page bundle, assets, or project root. See %s" $src .Position -}}
   {{- end -}}
 {{- end -}}
 
 {{ if $data }}
-  {{ $header := index $data 1 }}
+  {{ if ge $headerRow (len $data) }}
+    {{ errorf "csvtable-roles: headerRow %d is past the end of %q. See %s" $headerRow $src $.Position }}
+  {{ else }}
 
-  {{/* Column positions, resolved once */}}
-  {{ $functionIndex := -1 }}
-  {{ $featureIndex := -1 }}
-  {{ range $j, $col := $header }}
-    {{ if eq $col "Function" }}{{ $functionIndex = $j }}{{ end }}
-    {{ if eq $col "Feature" }}{{ $featureIndex = $j }}{{ end }}
-  {{ end }}
-  {{ if or (lt $functionIndex 0) (lt $featureIndex 0) }}
-    {{ errorf "role-tables: %q is missing a Function or Feature column. See %s" $src $.Position }}
-  {{ end }}
-
-  {{/* Role columns: index 4 up to "Keychain ID" */}}
-  {{ $roles := slice }}
-  {{ range $i, $col := $header }}
-    {{ if gt $i 3 }}
-      {{ if eq $col "Keychain ID" }}{{ break }}{{ end }}
-      {{ if and (ne (trim $col " ") "") (not (in $roles $col)) }}
-        {{ $roles = $roles | append $col }}
-      {{ end }}
+    {{ $header := slice }}
+    {{ range $col := index $data $headerRow }}
+      {{ $header = $header | append (trim $col " ") }}
     {{ end }}
-  {{ end }}
 
-  {{ range $category := $roles }}
-    {{ $categoryIndex := -1 }}
+    {{/* Column positions, resolved once */}}
+    {{ $functionIndex := -1 }}
+    {{ $featureIndex := -1 }}
     {{ range $j, $col := $header }}
-      {{ if eq $col $category }}{{ $categoryIndex = $j }}{{ end }}
+      {{ if eq $col "Function" }}{{ $functionIndex = $j }}{{ end }}
+      {{ if eq $col "Feature" }}{{ $featureIndex = $j }}{{ end }}
     {{ end }}
 
-    <div class="csvtable-div">
-      {{ $sectionName := $category | lower }}
-      {{ $urlPath := "roles" }}
-      {{ if hasPrefix $sectionName "workspace" }}
-        {{ $urlPath = "roles/workspace-roles" }}
-      {{ else if hasPrefix $sectionName "team" }}
-        {{ $urlPath = "roles/team-roles" }}
-      {{ else if hasPrefix $sectionName "org" }}
-        {{ $urlPath = "roles/organization-roles" }}
-      {{ else if hasPrefix $sectionName "provider" }}
-        {{ $urlPath = "roles/#provider-admin-role" }}
-      {{ else }}
-        {{ $urlPath = print "roles/" (urlize $sectionName) }}
+    {{ if or (lt $functionIndex 0) (lt $featureIndex 0) }}
+      {{ errorf "csvtable-roles: %q is missing a Function or Feature column in row %d. See %s" $src $headerRow $.Position }}
+    {{ else }}
+
+      {{/* Role columns: anything not excluded, paired with its position */}}
+      {{ $roles := slice }}
+      {{ $seen := slice }}
+      {{ range $j, $col := $header }}
+        {{ if and (ne $col "") (not (in $nonRoleColumns $col)) (not (in $seen $col)) }}
+          {{ $seen = $seen | append $col }}
+          {{ $roles = $roles | append (dict "name" $col "index" $j) }}
+        {{ end }}
       {{ end }}
-      <h2><a href="/cloud/security/{{ $urlPath }}">{{ $category }} Role</a></h2>
-      <table class="csvtable td-initial">
-        <thead>
-          <tr>
-            <th>Permission</th>
-            <th>Description</th>
-          </tr>
-        </thead>
-        <tbody>
-          {{ range $i, $row := $data }}
-            {{ if gt $i 1 }}
-              {{ $cell := index $row $categoryIndex }}
-              {{ if or (eq $cell "X") (eq $cell "X*") }}
-                <tr>
-                  <td>{{ index $row $functionIndex }}</td>
-                  <td>{{ index $row $featureIndex }}</td>
-                </tr>
-              {{ end }}
-            {{ end }}
+
+      {{ range $role := $roles }}
+        <div class="csvtable-div">
+          {{ $sectionName := $role.name | lower }}
+          {{ $urlPath := "roles" }}
+          {{ if hasPrefix $sectionName "workspace" }}
+            {{ $urlPath = "roles/workspace-roles" }}
+          {{ else if hasPrefix $sectionName "team" }}
+            {{ $urlPath = "roles/team-roles" }}
+          {{ else if hasPrefix $sectionName "org" }}
+            {{ $urlPath = "roles/organization-roles" }}
+          {{ else if hasPrefix $sectionName "provider" }}
+            {{ $urlPath = "roles/#provider-admin-role" }}
+          {{ else }}
+            {{ $urlPath = print "roles/" (urlize $sectionName) }}
+            {{ warnf "csvtable-roles: no URL mapping for role %q, guessing %q. See %s" $role.name $urlPath $.Position }}
           {{ end }}
-        </tbody>
-      </table>
-    </div>
+          <h2><a href="/cloud/security/{{ $urlPath }}">{{ $role.name }} Role</a></h2>
+          <table class="csvtable td-initial">
+            <thead>
+              <tr>
+                <th>Permission</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{ range $i, $row := $data }}
+                {{ if gt $i $headerRow }}
+                  {{ $cell := trim (index $row $role.index) " " }}
+                  {{ if or (eq $cell "X") (eq $cell "X*") }}
+                    <tr>
+                      <td>{{ index $row $functionIndex }}</td>
+                      <td>{{ index $row $featureIndex }}</td>
+                    </tr>
+                  {{ end }}
+                {{ end }}
+              {{ end }}
+            </tbody>
+          </table>
+        </div>
+      {{ end }}
+
+    {{ end }}
   {{ end }}
 {{ end }}
