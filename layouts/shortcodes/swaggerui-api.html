@@ -7,9 +7,9 @@
 
   Params:
   src         - path to the spec, which must be part of this site. Root-relative
-                paths (files under static/) are used as-is; anything else is
-                resolved against the page bundle, then assets/. Remote URLs are
-                not accepted.
+                paths (files under static/) are resolved against baseURL;
+                anything else is resolved against the page bundle, then
+                assets/. Remote URLs are not accepted.
   deepLinking - optional "true" to write the expanded operation into the URL
                 fragment. Off by default; only safe with one viewer per page.
 
@@ -33,7 +33,7 @@
 {{- else if or (hasPrefix $src "http://") (hasPrefix $src "https://") (hasPrefix $src "//") -}}
   {{- errorf "swaggerui-api: remote specs are not supported, %q must be a file in this site. See %s" $src .Position -}}
 {{- else if hasPrefix $src "/" -}}
-  {{- $url = $src -}}
+  {{- $url = relURL (strings.TrimPrefix "/" $src) -}}
 {{- else -}}
   {{- with or (.Page.Resources.Get $src) (resources.Get $src) -}}
     {{- $url = .RelPermalink -}}
