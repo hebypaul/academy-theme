@@ -43,7 +43,6 @@
       {{ $header = $header | append (trim $col " ") }}
     {{ end }}
 
-    {{/* Column positions, resolved once */}}
     {{ $functionIndex := -1 }}
     {{ $featureIndex := -1 }}
     {{ range $j, $col := $header }}
@@ -54,8 +53,6 @@
     {{ if or (lt $functionIndex 0) (lt $featureIndex 0) }}
       {{ errorf "csvtable-roles: %q is missing a Function or Feature column in row %d. See %s" $src $headerRow $.Position }}
     {{ else }}
-
-      {{/* Role columns: anything not excluded, paired with its position */}}
       {{ $roles := slice }}
       {{ $seen := slice }}
       {{ range $j, $col := $header }}
@@ -77,6 +74,8 @@
             {{ $urlPath = "roles/organization-roles" }}
           {{ else if hasPrefix $sectionName "provider" }}
             {{ $urlPath = "roles/#provider-admin-role" }}
+          {{ else if hasPrefix $sectionName "user" }}
+            {{ $urlPath = "roles/user-role" }}
           {{ else }}
             {{ $urlPath = print "roles/" (urlize $sectionName) }}
             {{ warnf "csvtable-roles: no URL mapping for role %q, guessing %q. See %s" $role.name $urlPath $.Position }}
